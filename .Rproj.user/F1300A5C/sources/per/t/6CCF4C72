@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1553451524548.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "2161525572",
+    "id" : "6CCF4C72",
+    "lastKnownWriteTime" : 1552592157,
+    "last_content_update" : 1552592157,
+    "path" : "C:/Users/suata/Dropbox/NOW/05-Yazilim/stm-prototype/healthoscope/app.R",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "143,30",
+        "scrollLine" : "0"
+    },
+    "relative_order" : 3,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

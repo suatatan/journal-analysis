@@ -1,0 +1,222 @@
+#
+# This is a Shiny web application. You can run the application by clicking
+# the 'Run App' button above.
+#
+# Find out more about building applications with Shiny here:
+#
+#    http://shiny.rstudio.com/
+#
+
+library(shiny)
+library(igraph)
+library(sqldf)
+library(visNetwork)
+
+#install.packages('visNetwork','igraph','sqlite','shiny')
+
+# Define UI for application that draws a histogram
+ui <- fluidPage(
+  titlePanel("STM Fikir-Ürün Döngüsü"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      helpText("Veri kayankarlını seçin"),
+      
+      selectInput("net1", 
+                  label = "Birinci kaynağı seçin",
+                  choices = c("Akademik", 
+                              "Patent",
+                              "Klinik"),
+                  selected = "Akademik"),
+      selectInput("net2", 
+                  label = "Birinci kaynağı seçin",
+                  choices = c("Akademik", 
+                              "Patent",
+                              "Klinik"),
+                  selected = "Patent"),
+      
+      sliderInput("eslesme_orani",
+                  label = "Eşleşme oranı",
+                  min = 0, max = 0.01,value=0.002,step=0.001)
+    ),
+    
+    mainPanel(
+      tabsetPanel(
+        tabPanel( "Ngram1",h2("1. Ağ için N-gram"),tableOutput("tablo1")),
+        tabPanel( "Ngram2",h2("2. Ağ için N-gram"), tableOutput("tablo2")),
+        tabPanel( "Graf1", plotOutput("graf1")),
+        tabPanel( "Graf2", plotOutput("graf2")),
+        tabPanel( "Derece1",h2("1. Ağ için Derece Merkeziliği"), tableOutput("der1")),
+        tabPanel( "Derece2",h2("2. Ağ için Derece Merkeziliği"), tableOutput("der2")),
+        tabPanel( "Yakınlık 1",h2("1. Ağ için Yakınlık Merkeziliği"),tableOutput("yak1")),
+        tabPanel( "Yakınlık 2",h2("2. Ap için Yakınlık Merekziliği"),tableOutput("yak2")),
+        tabPanel( "Ağ 1 Özel", h2("Sadece 1. ağdaki kavramlar"),tableOutput("ag1oz")),
+        tabPanel( "Ağ 2 Özel",  h2("Sadece 2. ağdaki kavramlar"),tableOutput("ag2oz")),
+        tabPanel(" Ortak Kavramlar",h2("Her iki ağda da var olan kavramlar"),
+                 p("Eşleşme oranını değiştirin:
+                   EO büyüdükçe kesişim küçülür"),tableOutput("orkav")),
+        tabPanel(" Dinamik 1",h2("Dinamik Ağ 1"),
+                 p("ID seçin"),visNetworkOutput("dinamik1", width = "100%", height = "400px")),
+        tabPanel(" Dinamik 2",h2("Dinamik Ağ 2"),
+                 p("ID seçin"),visNetworkOutput("dinamik2", width = "100%", height = "400px"))
+        
+    )
+      
+    )
+  )
+)
+
+# Define server logic required to draw a histogram
+server <- function(input, output) {
+  
+  output$Composite <- renderDataTable(datatable(FVI_DATA_COMPOSITE, 
+                                                options = list(pageLength = 10,lengthChange=FALSE)) %>%
+                                        formatRound(c(3:9), 6) %>% 
+                                        formatStyle(columns = c(3:9), 'text-align' = 'center'))
+  
+  dataInput <- reactive({
+    net1 <- input$net1
+    net2 <- input$net2
+    eslesme_orani <- input$eslesme_orani
+    n1_csv <- read.csv(sprintf("product_data/%s.csv",net1))
+    n2_csv <- read.csv(sprintf("product_data/%s.csv",net2))
+    
+    n1_csv <-na.omit(n1_csv)
+    n2_csv <-na.omit(n2_csv)
+    
+    n1_g <- graph_from_data_frame(n1_csv)
+    n2_g <- graph_from_data_frame(n2_csv)
+    
+    n1_degree <- as.data.frame(degree(n1_g,normalized = TRUE))
+    n1_deg_df <- data.frame(degree=n1_degree,vertex=rownames(n1_degree),row.names = NULL)
+    colnames(n1_deg_df) <- c('degree','vertex')
+    n1_deg_df <- sqldf("select * from n1_deg_df order by degree desc")
+    
+    n2_degree <- as.data.frame(degree(n2_g,normalized = TRUE))
+    n2_deg_df <- data.frame(degree=n2_degree,vertex=rownames(n2_degree),row.names = NULL)
+    colnames(n2_deg_df) <- c('degree','vertex')
+    n2_deg_df <- sqldf("select * from n2_deg_df order by degree desc")
+    
+    sql_a <- sprintf("select n1_deg_df.degree,n1_deg_df.vertex from n1_deg_df inner join n2_deg_df on n1_deg_df.vertex = n2_deg_df.vertex where n1_deg_df.degree > %s and n2_deg_df.degree > %s",eslesme_orani,eslesme_orani)
+    orkav_tab <- sqldf(sql_a)
+    
+    sql_b=sprintf("select n1_deg_df.degree,n1_deg_df.vertex from n1_deg_df inner join n2_deg_df on n1_deg_df.vertex = n2_deg_df.vertex where n1_deg_df.degree > %s and n2_deg_df.degree < %s",eslesme_orani,eslesme_orani)
+    sadece_n1_kav_tab <- sqldf(sql_b)
+    
+    sql_c=sprintf("select n1_deg_df.degree,n1_deg_df.vertex from n1_deg_df inner join n2_deg_df on n1_deg_df.vertex = n2_deg_df.vertex where n1_deg_df.degree < %s and n2_deg_df.degree > %s",eslesme_orani,eslesme_orani)
+    sadece_n2_kav_tab <- sqldf(sql_c)
+    
+    n1_yak <- closeness(n1_g)
+    n1_yak_df <- data.frame(closeness = n1_yak, vertex = names(n1_yak),row.names = NULL)
+    colnames(n1_yak_df) <- c('closeness','vertex')
+    n1_yak_df <- sqldf("select * from n1_yak_df order by closeness desc")
+    
+    n2_yak <- closeness(n1_g)
+    n2_yak_df <- data.frame(closeness = n2_yak, vertex = names(n1_yak),row.names = NULL)
+    colnames(n2_yak_df) <- c('closeness','vertex')
+    n2_yak_df <- sqldf("select * from n2_yak_df order by closeness desc")
+    
+    
+    c <- a
+    list(net1=net1,
+         net2=net2,
+         n1_csv=n1_csv,
+         n2_csv=n2_csv,
+         n1_g=n1_g,
+         n2_g=n2_g,
+         n1_deg_df = n1_deg_df,
+         n2_deg_df = n2_deg_df,
+         orkav_tab = orkav_tab,
+         sadece_n1_kav_tab = sadece_n1_kav_tab,
+         sadece_n2_kav_tab = sadece_n2_kav_tab,
+         n1_yak_df = n1_yak_df,
+         n2_yak_df = n2_yak_df)
+  })
+  
+  
+  
+  output$tablo1 <- renderTable({
+    dataInput()$n1_csv
+    })
+  output$tablo2 <- renderTable({
+    dataInput()$n2_csv
+  })
+  output$graf1 <- renderPlot({
+    
+    # Create a Progress object
+    progress <- shiny::Progress$new()
+    # Make sure it closes when we exit this reactive, even if there's an error
+    on.exit(progress$close())
+    
+    progress$set(message = "Hazırlanıyor", value = 0)
+    
+    plot(dataInput()$n1_g,vertex.label=NA,vertex.size=0.02,edge.arrow.size=0.01)
+  })
+  output$graf2 <- renderPlot({
+    
+    # Create a Progress object
+    progress <- shiny::Progress$new()
+    # Make sure it closes when we exit this reactive, even if there's an error
+    on.exit(progress$close())
+    
+    progress$set(message = "Hazırlanıyor", value = 0)
+    
+    plot(dataInput()$n2_g,vertex.label=NA,vertex.size=0.02,edge.arrow.size=0.01)
+  })
+  output$der1 <- renderTable({
+    dataInput()$n1_deg_df
+  },digits = 10)
+  output$der2 <- renderTable({
+    dataInput()$n2_deg_df
+  },digits = 10)
+  output$orkav <- renderTable({
+    dataInput()$orkav_tab
+  },digits = 10)
+  output$ag1oz <- renderTable({
+    dataInput()$sadece_n1_kav_tab
+  },digits = 10)
+  output$ag2oz <- renderTable({
+    dataInput()$sadece_n2_kav_tab
+  },digits = 10)
+  output$yak1 <- renderTable({
+    dataInput()$n1_yak_df
+  },digits = 10)
+  
+  output$yak2 <- renderTable({
+    dataInput()$n2_yak_df
+  },digits = 10)
+  
+  output$dinamik1 <- renderVisNetwork({
+    
+    # Create a Progress object
+    progress <- shiny::Progress$new()
+    # Make sure it closes when we exit this reactive, even if there's an error
+    on.exit(progress$close())
+    
+    progress$set(message = "Hazırlanıyor", value = 30)
+    
+    visIgraph(dataInput()$n1_g) %>% visOptions(highlightNearest = list(enabled = T, hover = T), height = "750px",
+                                   nodesIdSelection = T)
+  })
+  
+  output$dinamik2 <- renderVisNetwork({
+    
+    # Create a Progress object
+    progress <- shiny::Progress$new()
+    # Make sure it closes when we exit this reactive, even if there's an error
+    on.exit(progress$close())
+    
+    progress$set(message = "Hazırlanıyor", value = 20)
+    
+    visIgraph(dataInput()$n2_g) %>% visOptions(highlightNearest = list(enabled = T, hover = T), height = "750px",
+                                               nodesIdSelection = T)  %>%
+      visPhysics(stabilization = FALSE)
+  })
+  
+  
+  
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
+

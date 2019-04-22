@@ -1,0 +1,12 @@
+name: JournalAnalytics
+title: JournalAnalytics
+username:
+account: suatatan
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 810265
+bundleId: 1969098
+url: https://suatatan.shinyapps.io/JournalAnalytics/
+when: 1553714783.01956
+asMultiple: FALSE
+asStatic: FALSE
